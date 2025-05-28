@@ -5,8 +5,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.streamers import TextIteratorStreamer
 from transformers.utils.quantization_config import BitsAndBytesConfig
 
-st.title("Streamlit Local Chat")
-
 MODEL_NAME = "sbintuitions/sarashina2.2-3b-instruct-v0.1"
 
 
@@ -26,15 +24,6 @@ def load_model(model_name):
 
 
 model, tokenizer = load_model(MODEL_NAME)
-
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Display chat history
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
 
 
 def _tokenize_prompts(tokenizer, prompts, device):
@@ -103,6 +92,17 @@ def ai_response_stream(prompts):
 
     thread.join()
 
+
+# Streamlit UI
+st.title("Streamlit Local Chat")
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display chat history
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
 
 # Chat input and message handling
 if prompt := st.chat_input("Please say something"):
