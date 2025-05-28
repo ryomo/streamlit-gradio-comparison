@@ -2,7 +2,15 @@
 
 ## What is this?
 
-This project demonstrates and compares the implementation of identical application features using both Streamlit and Gradio.
+This project demonstrates and compares the implementation of identical chat application features using both Streamlit and Gradio.
+
+Both implementations create a simple LLM chat interface that runs a local Japanese LLM "Sarashina2.2-3b-instruct" for text generation.
+
+## Requirements
+
+- NVIDIA GPU with 8GB VRAM or higher
+- CUDA
+- uv
 
 ## Install
 
