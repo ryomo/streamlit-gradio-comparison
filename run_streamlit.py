@@ -12,6 +12,7 @@ MODEL_NAME = "sbintuitions/sarashina2.2-3b-instruct-v0.1"
 # Since Streamlit reruns the entire script each time.
 @st.cache_resource
 def load_model(model_name):
+    """Load the model and tokenizer."""
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     quant_config = BitsAndBytesConfig(
         load_in_8bit=True,
@@ -21,9 +22,6 @@ def load_model(model_name):
         quantization_config=quant_config,
     )
     return model, tokenizer
-
-
-model, tokenizer = load_model(MODEL_NAME)
 
 
 def _tokenize_prompts(tokenizer, prompts, device):
@@ -46,7 +44,8 @@ def _tokenize_prompts(tokenizer, prompts, device):
     return model_inputs
 
 
-def _create_generation_thread(model, streamer, inputs) -> threading.Thread:
+def _create_generation_thread(model, streamer, inputs, tokenizer) -> threading.Thread:
+    """Create a thread for model generation."""
     thread = threading.Thread(
         target=model.generate,
         kwargs=dict(
@@ -73,7 +72,7 @@ def _extract_response(text: str) -> str:
     return text
 
 
-def ai_response_stream(prompts):
+def ai_response_stream(model, tokenizer, prompts):
     """Generator function for streaming AI responses."""
     model_inputs = _tokenize_prompts(tokenizer, prompts, model.device)
 
@@ -83,7 +82,7 @@ def ai_response_stream(prompts):
     )
 
     # Run model generation in a separate thread
-    thread = _create_generation_thread(model, streamer, model_inputs)
+    thread = _create_generation_thread(model, streamer, model_inputs, tokenizer)
     thread.start()
 
     # Streaming display
@@ -91,6 +90,10 @@ def ai_response_stream(prompts):
         yield _extract_response(new_text)
 
     thread.join()
+
+
+# Load the model and tokenizer
+model, tokenizer = load_model(MODEL_NAME)
 
 
 # Streamlit UI
@@ -113,5 +116,5 @@ if prompt := st.chat_input("Please say something"):
 
     # Generate and display AI response
     with st.chat_message("assistant"):
-        response = st.write_stream(ai_response_stream(st.session_state.messages))
+        response = st.write_stream(ai_response_stream(model, tokenizer, st.session_state.messages))
     st.session_state.messages.append({"role": "assistant", "content": response})

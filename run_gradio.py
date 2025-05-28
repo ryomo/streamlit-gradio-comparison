@@ -7,6 +7,7 @@ from transformers.utils.quantization_config import BitsAndBytesConfig
 
 MODEL_NAME = "sbintuitions/sarashina2.2-3b-instruct-v0.1"
 
+
 # NOTE: @lru_cache is currently inefective since load_model() is only called once.
 @lru_cache(maxsize=1)
 def load_model(model_name):
@@ -22,11 +23,9 @@ def load_model(model_name):
     return model, tokenizer
 
 
-model, tokenizer = load_model(MODEL_NAME)
-
-
 def _tokenize_prompts(tokenizer, prompts, device):
     """Tokenize the chat prompts."""
+
     formatted_text = tokenizer.apply_chat_template(
         prompts,
         tokenize=False,
@@ -44,7 +43,7 @@ def _tokenize_prompts(tokenizer, prompts, device):
     return model_inputs
 
 
-def _create_generation_thread(model, streamer, inputs, tokenizer):
+def _create_generation_thread(model, streamer, inputs, tokenizer) -> threading.Thread:
     """Create a thread for model generation."""
     thread = threading.Thread(
         target=model.generate,
@@ -56,10 +55,10 @@ def _create_generation_thread(model, streamer, inputs, tokenizer):
             max_new_tokens=512,
             use_cache=True,
             # Use randomness when choosing words
-            do_sample=True,
-            temperature=1.0,
-            top_k=50,
-            top_p=1.0,
+            do_sample=True,  # If False, the model always picks the most likely next word. Default False
+            temperature=1.0,  # Higher temperature = more randomness. Default 1.0
+            top_k=50,  # Limits the selection of next words. Default 50
+            top_p=1.0,  # top_p=1.0 means no limit; top_p=0.9 would restrict to the top words that make up 90% of the probability. Default 1.0
         ),
     )
     return thread
@@ -72,7 +71,7 @@ def _extract_response(text: str) -> str:
     return text
 
 
-def chat_function(message, history):
+def chat_function(model, tokenizer, message, history):
     """Main chat function for Gradio."""
 
     # Convert Gradio history format to messages format
@@ -106,64 +105,72 @@ def chat_function(message, history):
     thread.join()
 
 
-# Create Gradio interface
-with gr.Blocks(title="Gradio Local Chat") as demo:
-    gr.Markdown("# Gradio Local Chat")
+def main():
+    # Load the model and tokenizer
+    model, tokenizer = load_model(MODEL_NAME)
 
-    chatbot = gr.Chatbot(
-        [],
-        elem_id="chatbot",
-        type="messages",
-        height=600
-    )
 
-    with gr.Row():
-        msg = gr.Textbox(
-            scale=4,
-            placeholder="Please say something",
-            container=False,
-            show_label=False
+    # Create Gradio interface
+    with gr.Blocks(title="Gradio Local Chat") as demo:
+        gr.Markdown("# Gradio Local Chat")
+
+        chatbot = gr.Chatbot(
+            [],
+            elem_id="chatbot",
+            type="messages",
+            height=600
         )
-        submit_btn = gr.Button("Send", scale=1)
 
-    # Clear button
-    clear_btn = gr.Button("Clear Chat History", variant="secondary")
+        with gr.Row():
+            msg = gr.Textbox(
+                scale=4,
+                placeholder="Please say something",
+                container=False,
+                show_label=False
+            )
+            submit_btn = gr.Button("Send", scale=1)
 
-    def user_input(message, history):
-        """Handle user input."""
-        return "", history + [{"role": "user", "content": message}]
+        # Clear button
+        clear_btn = gr.Button("Clear Chat History", variant="secondary")
 
-    def bot_response(history):
-        """Generate bot response."""
-        user_message = history[-1]["content"]
-        # Remove the last entry and pass history without it
-        chat_history = history[:-1]
+        def user_input(message, history):
+            """Handle user input."""
+            return "", history + [{"role": "user", "content": message}]
 
-        # Stream the response
-        for response in chat_function(user_message, chat_history):
-            # Update the last message with assistant response
-            if len(history) > 0 and history[-1]["role"] == "user":
-                updated_history = history[:-1] + [
-                    history[-1],
-                    {"role": "assistant", "content": response}
-                ]
-            else:
-                updated_history = history + [{"role": "assistant", "content": response}]
-            yield updated_history
+        def bot_response(history):
+            """Generate bot response."""
+            user_message = history[-1]["content"]
+            # Remove the last entry and pass history without it
+            chat_history = history[:-1]
 
-    def clear_chat():
-        """Clear chat history."""
-        return []
+            # Stream the response
+            for response in chat_function(model, tokenizer, user_message, chat_history):
+                # Update the last message with assistant response
+                if len(history) > 0 and history[-1]["role"] == "user":
+                    updated_history = history[:-1] + [
+                        history[-1],
+                        {"role": "assistant", "content": response}
+                    ]
+                else:
+                    updated_history = history + [{"role": "assistant", "content": response}]
+                yield updated_history
 
-    # Event handlers
-    msg.submit(user_input, [msg, chatbot], [msg, chatbot], queue=False).then(
-        bot_response, [chatbot], [chatbot]
-    )
-    submit_btn.click(user_input, [msg, chatbot], [msg, chatbot], queue=False).then(
-        bot_response, [chatbot], [chatbot]
-    )
-    clear_btn.click(clear_chat, outputs=[chatbot])
+        def clear_chat():
+            """Clear chat history."""
+            return []
+
+        # Event handlers
+        msg.submit(user_input, [msg, chatbot], [msg, chatbot], queue=False).then(
+            bot_response, [chatbot], [chatbot]
+        )
+        submit_btn.click(user_input, [msg, chatbot], [msg, chatbot], queue=False).then(
+            bot_response, [chatbot], [chatbot]
+        )
+        clear_btn.click(clear_chat, outputs=[chatbot])
+
+    # Launch the Gradio app
+    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
 
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    main()
